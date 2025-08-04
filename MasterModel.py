@@ -292,23 +292,26 @@ class Node:
         triangle_arr = [0, 0]
         bias_arr = [0, 0]
         # create arrays for each model that will have no effect on the final model unless they are assigned a value.
-        # note that the following models 
+        # note that the following models has an override for the first few generations to only use the random walk model if set.
         if self.included[0] or self.generation < random_gen:
             rand_angle = random.random() * 2 * math.pi
             rand_arr = [math.cos(rand_angle), math.sin(rand_angle)]
-        # if this model includes the random walk model, assign meaningful value to its corresponding array
+        # if this model includes the random walk model, assign a meaningful value to its corresponding array
         if self.included[1] and self.generation >= random_gen:
             density_angle = random.random() * 2 * math.pi
             density_arr = to_unit(arr_sum(scale_arr([math.cos(self.angle), math.sin(self.angle)], density), [math.cos(density_angle), math.sin(density_angle)]))
+        # if this model includes the random walk model, assign meaningful value to its corresponding array based on the density
         if self.included[2] and self.generation >= random_gen:
             true_region = [[-math.pi, math.pi, 1]]
             regions = []
             cousins = self.get_child_cousins()
+            # initialize arrays
             for degree in range(len(cousins)):
                 r = radius(self.generation, degree)
                 for cousin in cousins[degree]:
                     if clamped(distBetween(self.position, cousin.position), 1 - r, 1 + r):
                         get_angles(self.position, cousin.position, 1, r, 0.1, regions)
+            # for each cousin of this node's prospective children, determine which regions of possible placements overlap with the circle of exclusion around the cousins
             for region in regions:
                 j = 0
                 while (j < len(true_region)) and (true_region[j][1] < region[1]):
@@ -331,12 +334,17 @@ class Node:
                         true_region[j][1] = region[1]
                         true_region.insert(j + 1, [region[1], upper, true_region[j][2]])
                         true_region[j][2] *= region[2]
+            # determine the likelihood of a node successfully being any angle based on how often regions overlapped.
             index = random.choices(range(len(true_region)), map(lambda x: x[2] * (x[1]- x[0]) / math.pi / 2, true_region))[0]
+            # select one of the regions to use, weighted by the size of the region times the probability of successfully including that region.
             cloud_angle = lerp(true_region[index][0], true_region[index][1], random.random())
             cloud_arr = [math.cos(cloud_angle), math.sin(cloud_angle)]
+            # assign the corresponding array a value based on the angle, which is fairly chosen from the specified region.
+        # if this model includes the cloud walk model, assign meaningful value to its corresponding array.
         if self.included[3] and self.generation >= random_gen:
             cluster_angle = self.guiding + random.random() * 2 * self.cluster_variance - self.cluster_variance
             cluster_arr = [math.cos(cluster_angle), math.sin(cluster_angle)]
+        # if this model includes the cluster walk model, assign meaningful value to its corresponding array.
         if self.included[4] and self.generation >= random_gen:
             lattice_angles = [0, 90, 180, 270]
             # an array of all possible lattice angles
@@ -348,49 +356,49 @@ class Node:
             # the coordinates of the new node
         if self.included[5] and self.generation >= random_gen:
             rand_val = random.randint(1, 22)
-            # a random value that determines which direction the node goes in
+            # a random value that determines which direction the node goes in.
             if rand_val < 8:
                 triangle_angle = math.radians(0) + random.random() * 2 * self.bias_variance - self.bias_variance
-                # an angle within 10 degrees of 0
+                # an angle within a specified number of degrees of 0.
             elif rand_val < 15:
                 triangle_angle = math.radians(120) + random.random() * 2 * self.bias_variance - self.bias_variance
-                # an angle within 10 degrees of 120
+                # an angle within a specified number of degrees of 120.
             elif rand_val < 22:
                 triangle_angle = math.radians(240) + random.random() * 2 * self.bias_variance - self.bias_variance
-                # an angle within 10 degrees of 240
+                # an angle within a specified number of degrees of 240.
             else:
                 triangle_angle = random.random() * 2 * math.pi
-                # a completely random angle
+                # a completely random angle.
             triangle_arr = [math.cos(triangle_angle), math.sin(triangle_angle)]
-            # the coordinates of the new node
+            # the coordinates of the new node.
         if self.included[6] and self.generation >= random_gen:
             rand_val = random.randint(1, 22)
-            # a random value that determines which direction the node goes in
+            # a random value that determines which direction the node goes in.
             if self.generation == 0:
                 if rand_val < 8:
                     bias_angle = math.radians(0) + random.random() * 2 * self.bias_variance - self.bias_variance
-                    # an angle within 10 degrees of 0
+                    # an angle within a specified number of degrees of 0.
                 elif rand_val < 15:
                     bias_angle = math.radians(120) + random.random() * 2 * self.bias_variance - self.bias_variance
-                    # an angle within 10 degrees of 120
+                    # an angle within a specified number of degrees of 120.
                 elif rand_val < 22:
                     bias_angle = math.radians(240) + random.random() * 2 * self.bias_variance - self.bias_variance
-                    # an angle within 10 degrees of 240
+                    # an angle within a specified number of degrees of 240.
                 else:
                     bias_angle = random.random() * 2 * math.pi
                     # a completely random angle
             else:
                 if rand_val < 22:
                     bias_angle = self.angle + random.random() * 2 * self.parent_variance  - self.parent_variance
-                    # an angle within 10 degrees of its parent's angle
+                    # an angle within a specified number of degrees of its parent's angle.
                 else:
                     bias_angle = random.random() * 2 * math.pi
                     # a completely random angle
             bias_arr = [math.cos(bias_angle), math.sin(bias_angle)]
-            # the coordinates of the new node
+            # the coordinates of the new node.
         if self.generation < random_gen:
-            delta = to_unit(arr_sum(scale_arr(rand_arr, 1)))
-            # only weighs the random model
+            delta = rand_arr
+            # only uses the random model.
         else:
             delta = to_unit(arr_sum(scale_arr(rand_arr, self.weights[0]),
                                     scale_arr(density_arr, self.weights[1]),
@@ -399,11 +407,15 @@ class Node:
                                     scale_arr(lattice_arr, self.weights[4]), 
                                     scale_arr(triangle_arr, self.weights[5]), 
                                     scale_arr(bias_arr, self.weights[6])))
+            # scale each model by its weight, sum them together, then find a 'unit array' corresponding to the summand.
         for _ in range(child_count):
             bearing = math.atan2(delta[1], delta[0]) + random.random() * 2 * self.sibling_variance - self.sibling_variance
             self.children.append(Node(arr_sum(self.position, [math.cos(bearing), math.sin(bearing)]), self, bearing, self.generation + 1, self.parent_variance, self.sibling_variance, self.cluster_variance, self.bias_variance, next, self.weights, self.included))
-            
+        # for each child that should be generated, generate an angle that is within the sibling variance of the true angle and use that angle as the node's direction.
+        
     def get_child_cousins(self):
+        """Identify the cousins of this node's prospective children, based on the degree of separation.
+        Assumes no siblings, and returns an array of arrays where the array an intex i contains all ith cousins."""
         cousins = [[]]
         uncommon_ancestor = self
         common_ancestor = self.parent
@@ -419,6 +431,7 @@ class Node:
         return cousins
     
     def get_child_cousins_helper(self, arr, index):
+        """Aids in identifying the cousins of a node's children."""
         if index == 1:
             for child in self.children:
                 arr.append(child)
@@ -427,9 +440,12 @@ class Node:
                 child.get_child_cousins_helper(arr, index - 1)
     
     def plot_end(self, env, hue):
+        """Plots the node as a point in env."""
         env.plot([self.position[0]], [self.position[1]], 'o', color = hue)
 
     def plot_path(self, env, hue, depth):
+        """Plots the path between this node and its children in env.
+        Also plots this node as a point if it has none."""
         for i, child in enumerate(self.children):
             new_hue = hue + i / (child_count**depth)
             col = color_alpha(color.hsv_to_rgb((new_hue, 1, 1)), 0.1)
@@ -439,7 +455,10 @@ class Node:
             self.plot_end(env, color_alpha(color.hsv_to_rgb((hue, 1, 1)), 0.1))
 
     def plot_other_path(self, env):
-        for i, child in enumerate(self.children):
+        """Plots the path between this node and its children in env.
+        Also plots this node as a point if it has none.
+        Is in monochrome (cyan)."""
+        for child in self.children:
             col = "#00ffff10"
             env.plot([self.position[0], child.position[0]], [self.position[1], child.position[1]], color = col)
             child.plot_other_path(env)
@@ -447,6 +466,7 @@ class Node:
             self.plot_end(env, "#00ffff10")
 
 def arr_sum(*args):
+    """Sums the entries in a series of 2d arrays."""
     output = [0, 0]
     for arg in args:
         output[0] += arg[0]
@@ -454,33 +474,39 @@ def arr_sum(*args):
     return output
 
 def arr_dif(arrA, arrB):
+    """Calculates the difference between the values of two arrays of the same length."""
     output = []
     for i in range(len(arrA)):
         output.append(arrA[i] - arrB[i])
     return output
 
 def to_unit(arr):
+    """Converts an array to one of unit length. (i.e. the sum of the squares of all entries is 1)
+    Returns an array of zeroes if the scale is neglegible."""
     scale = get_scale(arr)
     if scale < 0.0001:
-        return 0
+        return [0,0]
     output = []
     for i in range(len(arr)):
         output.append(arr[i] / scale)
     return output
 
 def get_scale(arr):
+    """Calculates the length of an array as if it were a vector."""
     scale = 0
     for i in arr:
         scale += i * i
     return math.sqrt(scale)
 
 def scale_arr(arr, scale):
+    """Scales an array by a scaling factor."""
     output = []
     for i in arr:
         output.append(i * scale)
     return output
 
 def density_func(s, pop):
+    """Calculates the density at a Node's position in a population."""
     count = 0
     for cousin in pop:
         if get_scale(arr_dif(s.position, cousin.position)) <= 1:
@@ -488,22 +514,29 @@ def density_func(s, pop):
     return count
 
 def color_alpha(col, alpha):
+    """Attaches an alpha value to a rgb color object."""
     return (col[0], col[1], col[2], alpha)
 
 def f_t(t):
+    """The f(t) function, which determines the radii that the cluster model uses. Varies based on t."""
     return 0.012 * ((2 * t + 1) / (t + 1))
 
 def radius(gen, degree):
+    """The radius function, which determines the radii that the cluster model uses.
+    May vary based on the degree of separation between two nodes and the gen number."""
     return 0.1
 
 fig, (ax1, ax2, ax3) = plot.subplots(3, 6, figsize = (20, 10))
 plot.subplots_adjust(left=.025, bottom=.05, right=.975, top=.9)
 axX = [ax1, ax2, ax3]
+# initialize the plotting environment.
 sim = Simulation(random_walk = answers[0], density = answers[1], cloud = answers[2], cluster = answers[3], lattice = answers[4], triangle = answers[5], bias = answers[6], random_walk_weight = answers[7], density_weight = answers[8], cloud_weight = answers[9], clustering_weight = answers[10], lattice_weight = answers[11], triangle_weight = answers[12], bias_weight = answers[13], par_var = answers[14], sib_var = answers[15], clu_var = answers[16], bias_var = answers[17])
+# create the simulation object.
 title_string = "Parameters: "
 for val in answers:
     title_string += str(val) + ", "
 fig.suptitle(title_string)
+# create and set the suptitle based on the parameters the model uses internally.
 for a in range(3):
     for b in range(3):
         sim.initialize()
@@ -522,10 +555,6 @@ for a in range(3):
         axX[a][b * 2 + 1].axis([-int(answers[19]), int(answers[19]), -int(answers[19]), int(answers[19])])
         axX[a][b * 2].set_title(f"Sim #{a * 3 + b + 1}: Full plot")
         axX[a][b * 2 + 1].set_title(f"Sim #{a * 3 + b + 1}: 2D Histogram")
+# run the model nine times and shows the results in the 3 x 6 grid.
 
 plot.show()
-# Models to recreate:
-# Density repulsion
-# Cloud repulsion
-# Clustering
-# True Random
